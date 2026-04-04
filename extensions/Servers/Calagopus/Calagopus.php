@@ -521,7 +521,7 @@ class Calagopus extends Server
 			}
 
 			$serverPayload['node_uuid'] = $nodeUuid;
-			$serverPayload['allocation_uuids'] = [$allocations[0]['uuid']];
+			$serverPayload['allocation_uuid'] = $allocations[0]['uuid'];
 
 			$response = $this->request('/api/admin/servers', 'post', $serverPayload);
 			$server = $response['server'];
@@ -539,7 +539,6 @@ class Calagopus extends Server
 				'location_uuids' => array_values($locationUuids),
 				'allow_overallocation' => false,
 			];
-			$serverPayload['allocation_uuids'] = [];
 
 			$response = $this->request('/api/admin/servers/deploy', 'post', $serverPayload);
 			$server = $response['server'];
