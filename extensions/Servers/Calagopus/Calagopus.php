@@ -335,9 +335,8 @@ class Calagopus extends Server
 	 */
 	private function findServer(int $serviceId, bool $failIfNotFound = true): ?array
 	{
-		$externalId = 'paymenter-' . $serviceId;
 		try {
-			$response = $this->request('/api/admin/servers/external/' . urlencode($externalId));
+			$response = $this->request('/api/admin/servers/external/' . (string) $serviceId);
 			return $response['server'] ?? null;
 		} catch (Exception $e) {
 			if ($failIfNotFound) {
@@ -353,11 +352,9 @@ class Calagopus extends Server
 	 */
 	private function findOrCreateUser($orderUser): array
 	{
-		$externalId = 'paymenter-user-' . $orderUser->id;
-
 		// 1. Try lookup by external ID
 		try {
-			$response = $this->request('/api/admin/users/external/' . urlencode($externalId));
+			$response = $this->request('/api/admin/users/external/' . (string) $orderUser->id);
 			if (isset($response['user'])) {
 				return $response['user'];
 			}
@@ -375,7 +372,7 @@ class Calagopus extends Server
 		// 3. Try creating the user
 		try {
 			$response = $this->request('/api/admin/users', 'post', [
-				'external_id' => $externalId,
+				'external_id' => (string) $orderUser->id,
 				'username' => $username,
 				'email' => $orderUser->email,
 				'name_first' => $orderUser->first_name ?? $orderUser->name ?? 'User',
@@ -427,7 +424,7 @@ class Calagopus extends Server
 
 		// 6. Link the existing user by setting external_id
 		$this->request('/api/admin/users/' . $matched['uuid'], 'patch', [
-			'external_id' => $externalId,
+			'external_id' => (string) $orderUser->id,
 		]);
 
 		return $matched;
@@ -484,7 +481,7 @@ class Calagopus extends Server
 			'egg_uuid' => $eggUuid,
 			'start_on_completion' => (bool) ($settings['start_on_completion'] ?? false),
 			'skip_installer' => (bool) ($settings['skip_installer'] ?? false),
-			'external_id' => 'paymenter-' . $service->id,
+			'external_id' => (string) $service->id,
 			'name' => $serverName,
 			'limits' => [
 				'cpu'             => (int) ($settings['cpu'] ?? 100),
