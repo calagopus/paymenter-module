@@ -409,9 +409,13 @@ class Calagopus extends Server
 		// Generate a username
 		$baseName = preg_replace('/[^a-zA-Z0-9_]/', '', strtolower(Str::transliterate($orderUser->name ?? 'user')));
 		if (strlen($baseName) < 3) {
-			$baseName = 'user';
+				$baseName = 'user';
 		}
-		$username = substr($baseName, 0, 12) . '_' . $orderUser->id;
+
+		$idStr = (string)$orderUser->id;
+		$maxNameLen = max(0, 14 - strlen($idStr));
+
+		$username = substr($baseName, 0, $maxNameLen) . '_' . $idStr;
 
 		// Try creating the user
 		try {
