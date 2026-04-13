@@ -25,16 +25,18 @@ OAuth linking allows your users to log into the Calagopus panel using their Paym
 
 2. In your Calagopus panel, go to **Admin → OAuth Providers → Import** to import the template.
 
-3. After importing, click the OAuth Provider and copy the Redirect URL.
+3. After importing, click the OAuth Provider and edit all the URLs to point to your Paymenter installation.
 
-4. In Paymenter Admin, go to **Oauth Clients → New oauth client** and paste the Redirect URL into the "Redirect" field. Fill out the name and save the client.
+4. Now, save the provider and copy the Redirect URL.
 
-5. Copy the Client ID and Secret from the OAuth client you just created in Paymenter.
+5. In Paymenter Admin, go to **Oauth Clients → New oauth client** and paste the Redirect URL into the "Redirect" field. Fill out the name and save the client.
 
-6. In Calagopus, edit the OAuth Provider you imported and paste the Client ID and Secret into the corresponding fields. Save the provider.
+6. Copy the Client ID and Secret from the OAuth client you just created in Paymenter.
 
-7. Copy the UUID of the OAuth Provider in Calagopus and paste it into the "OAuth Provider UUID" field in your Paymenter Calagopus server configuration.
+7. In Calagopus, edit the OAuth Provider you imported and paste the Client ID and Secret into the corresponding fields. Save the provider.
 
-8. Save the server configuration in Paymenter.
+8. Copy the UUID of the OAuth Provider in Calagopus and paste it into the "OAuth Provider UUID" field in your Paymenter Calagopus server configuration.
 
-9. Profit, now when a new server is created for a user, Paymenter will automatically link their account to Calagopus using the OAuth provider, allowing them to log in to the panel with their Paymenter credentials.
+9. Save the server configuration in Paymenter.
+
+10. Profit, now when a new server is created for a user, Paymenter will automatically link their account to Calagopus using the OAuth provider, allowing them to log in to the panel with their Paymenter credentials.

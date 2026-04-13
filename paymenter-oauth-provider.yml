@@ -1,8 +1,8 @@
 name: 'Paymenter'
 description: null
-auth_url: 'https://paymenter.webhook.pet/oauth/authorize'
-token_url: 'https://paymenter.webhook.pet/api/oauth/token'
-info_url: 'https://paymenter.webhook.pet/api/me'
+auth_url: 'https://your.paymenter.panel/oauth/authorize'
+token_url: 'https://your.paymenter.panel/api/oauth/token'
+info_url: 'https://your.paymenter.panel/api/me'
 scopes:
   - 'profile'
 identifier_path: '$.id'
