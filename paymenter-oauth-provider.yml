@@ -1,0 +1,17 @@
+name: 'Paymenter'
+description: null
+auth_url: 'https://paymenter.webhook.pet/oauth/authorize'
+token_url: 'https://paymenter.webhook.pet/api/oauth/token'
+info_url: 'https://paymenter.webhook.pet/api/me'
+scopes:
+  - 'profile'
+identifier_path: '$.id'
+email_path: '$.email'
+username_path: null
+name_first_path: '$.first_name'
+name_last_path: '$.last_name'
+enabled: true
+login_only: true
+link_viewable: true
+user_manageable: false
+basic_auth: false

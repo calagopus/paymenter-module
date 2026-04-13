@@ -49,6 +49,24 @@ class Calagopus extends Server
 				'required' => true,
 				'encrypted' => true,
 			],
+			[
+				'name' => 'default_language',
+				'label' => 'Default User Language',
+				'type' => 'text',
+				'description' => 'Default language for created users (e.g. "en").',
+				'required' => false,
+				'default' => 'en',
+				'encrypted' => false,
+				'validation' => 'alpha|size:2',
+			],
+			[
+				'name' => 'oauth_provider_uuid',
+				'label' => 'OAuth Provider UUID',
+				'type' => 'text',
+				'description' => 'UUID of the Paymenter OAuth provider configured in Calagopus. Used to link users.',
+				'required' => false,
+				'encrypted' => false,
+			],
 		];
 	}
 
@@ -352,24 +370,50 @@ class Calagopus extends Server
 	 */
 	private function findOrCreateUser($orderUser): array
 	{
-		// 1. Try lookup by external ID
+		// Try lookup by oauth identifier if configured
+		$oauthProviderUuid = $this->config('oauth_provider_uuid');
+
+		if ($oauthProviderUuid) {
+			try {
+				$response = $this->request('/api/admin/oauth-providers/' . $oauthProviderUuid . '/users/identifier/' . (string) $orderUser->id);
+				if (isset($response['user_oauth_link']['user'])) {
+					return $response['user_oauth_link']['user'];
+				}
+			} catch (Exception $e) {
+				// Not found — continue to other lookups
+			}
+		}
+
+		// Try lookup by external ID
 		try {
 			$response = $this->request('/api/admin/users/external/' . (string) $orderUser->id);
 			if (isset($response['user'])) {
+				// Add OAuth link if configured
+				if ($oauthProviderUuid) {
+					try {
+						$this->request('/api/admin/users/' . $response['user']['uuid'] . '/oauth-links', 'post', [
+							'oauth_provider_uuid' => $oauthProviderUuid,
+							'identifier' => (string) $orderUser->id,
+						]);
+					} catch (Exception $e) {
+						// Ignore errors here — not critical if linking fails
+					}
+				}
+
 				return $response['user'];
 			}
 		} catch (Exception $e) {
 			// Not found — continue to create
 		}
 
-		// 2. Generate a username
+		// Generate a username
 		$baseName = preg_replace('/[^a-zA-Z0-9_]/', '', strtolower(Str::transliterate($orderUser->name ?? 'user')));
 		if (strlen($baseName) < 3) {
 			$baseName = 'user';
 		}
 		$username = substr($baseName, 0, 12) . '_' . $orderUser->id;
 
-		// 3. Try creating the user
+		// Try creating the user
 		try {
 			$response = $this->request('/api/admin/users', 'post', [
 				'external_id' => (string) $orderUser->id,
@@ -378,8 +422,20 @@ class Calagopus extends Server
 				'name_first' => $orderUser->first_name ?? $orderUser->name ?? 'User',
 				'name_last' => $orderUser->last_name ?? '',
 				'admin' => false,
-				'language' => 'en',
+				'language' => $this->config('default_language') ?: 'en',
 			]);
+
+			if ($oauthProviderUuid) {
+				try {
+					$this->request('/api/admin/users/' . $response['user']['uuid'] . '/oauth-links', 'post', [
+						'oauth_provider_uuid' => $oauthProviderUuid,
+						'identifier' => (string) $orderUser->id,
+					]);
+				} catch (Exception $e) {
+					// Ignore errors here — not critical if linking fails
+				}
+			}
+
 			return $response['user'];
 		} catch (Exception $e) {
 			// Only handle 409 — rethrow anything else
@@ -388,7 +444,7 @@ class Calagopus extends Server
 			}
 		}
 
-		// 4. 409 — user exists, search by email
+		// 409 — user exists, search by email
 		$searchResponse = $this->request('/api/admin/users', 'get', [
 			'page' => 1,
 			'per_page' => 10,
@@ -403,7 +459,7 @@ class Calagopus extends Server
 			}
 		}
 
-		// 5. Fallback: search by username
+		// Fallback: search by username
 		if (!$matched) {
 			$searchResponse = $this->request('/api/admin/users', 'get', [
 				'page' => 1,
@@ -422,10 +478,21 @@ class Calagopus extends Server
 			throw new Exception('User with this email/username already exists on the panel but could not be found via search.');
 		}
 
-		// 6. Link the existing user by setting external_id
+		// Link the existing user by setting external_id
 		$this->request('/api/admin/users/' . $matched['uuid'], 'patch', [
 			'external_id' => (string) $orderUser->id,
 		]);
+
+		if ($oauthProviderUuid) {
+			try {
+				$this->request('/api/admin/users/' . $matched['uuid'] . '/oauth-links', 'post', [
+					'oauth_provider_uuid' => $oauthProviderUuid,
+					'identifier' => (string) $orderUser->id,
+				]);
+			} catch (Exception $e) {
+				// Ignore errors here — not critical if linking fails
+			}
+		}
 
 		return $matched;
 	}
