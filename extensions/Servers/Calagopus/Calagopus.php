@@ -409,7 +409,7 @@ class Calagopus extends Server
 		// Generate a username
 		$baseName = preg_replace('/[^a-zA-Z0-9_]/', '', strtolower(Str::transliterate($orderUser->name ?? 'user')));
 		if (strlen($baseName) < 3) {
-				$baseName = 'user';
+			$baseName = 'user';
 		}
 
 		$idStr = (string)$orderUser->id;
@@ -522,7 +522,9 @@ class Calagopus extends Server
 			: (array_values($egg['docker_images'])[0] ?? '');
 		$startup = !empty($settings['startup_command'])
 			? $settings['startup_command']
-			: $egg['startup'];
+			: (isset($egg['startup']) ? $egg['startup'] : (isset($egg['startup_commands']['Default'])
+				? $egg['startup_commands']['Default']
+				: (array_values($egg['startup_commands'])[0] ?? '')));
 
 		$prefix = $settings['server_name_prefix'] ?? '';
 		$serverName = ($prefix ?: 'Server-') . $service->id;
