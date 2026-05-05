@@ -330,8 +330,14 @@ class Calagopus extends Server
 				[$key, $value] = explode(':', $pair, 2);
 				$key = trim($key);
 				$value = trim($value);
-				if ($key !== '' && is_numeric($value)) {
-					$limits[$key] = (int) $value;
+				if ($key !== '') {
+					if (is_numeric($value)) {
+						$limits[$key] = (int) $value;
+					} else if (strtolower($value) === 'true' || strtolower($value) === 'false') {
+						$limits[$key] = filter_var($value, FILTER_VALIDATE_BOOLEAN);
+					} else {
+						$limits[$key] = $value;
+					}
 				}
 			}
 		}
