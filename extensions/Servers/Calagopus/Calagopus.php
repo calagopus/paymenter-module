@@ -601,6 +601,7 @@ class Calagopus extends Server
 
 			$serverPayload['node_uuid'] = $nodeUuid;
 			$serverPayload['allocation_uuid'] = $allocations[0]['uuid'];
+			$serverPayload['allocation_uuids'] = [];
 
 			$response = $this->request('/api/admin/servers', 'post', $serverPayload);
 			$server = $response['server'];
