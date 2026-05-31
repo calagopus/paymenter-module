@@ -432,6 +432,7 @@ class Calagopus extends Server
 				'name_first' => $orderUser->first_name ?? $orderUser->name ?? 'User',
 				'name_last' => $orderUser->last_name ?? '',
 				'admin' => false,
+				'send_email' => true,
 				'language' => $this->config('default_language') ?: 'en',
 			]);
 
