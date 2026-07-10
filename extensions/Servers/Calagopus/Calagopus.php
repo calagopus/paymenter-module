@@ -354,6 +354,258 @@ class Calagopus extends Server
 		return array_map('intval', array_filter(array_map('trim', explode(',', $raw)), 'is_numeric'));
 	}
 
+
+	/**
+	 * Read a setting/property using exact key match first and case-insensitive fallback second.
+	 * This lets Paymenter config options override egg variables as long as the key matches the egg env variable.
+	 */
+	private function getSettingValue(array $settings, string $key, mixed &$value): bool
+	{
+		if (array_key_exists($key, $settings)) {
+			$value = $settings[$key];
+			return true;
+		}
+
+		foreach ($settings as $settingKey => $settingValue) {
+			if (is_string($settingKey) && strcasecmp($settingKey, $key) === 0) {
+				$value = $settingValue;
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	private function stringifySettingValue(mixed $value): string
+	{
+		if (is_bool($value)) {
+			return $value ? 'true' : 'false';
+		}
+
+		if (is_array($value)) {
+			return implode(',', array_map(fn ($item) => (string) $item, $value));
+		}
+
+		return (string) ($value ?? '');
+	}
+
+	private function boolSetting(array $settings, string $key, bool $default = false): bool
+	{
+		$value = null;
+		if (!$this->getSettingValue($settings, $key, $value)) {
+			return $default;
+		}
+
+		if (is_bool($value)) {
+			return $value;
+		}
+
+		if (is_numeric($value)) {
+			return (int) $value !== 0;
+		}
+
+		return filter_var($value, FILTER_VALIDATE_BOOLEAN);
+	}
+
+	/**
+	 * Normalize Calagopus API collections, because egg variables may come as:
+	 * - [ ...variables ]
+	 * - ['data' => [ ...variables ]]
+	 * - ['variables' => [ ...variables ]]
+	 * - a single variable object
+	 */
+	private function normalizeCollection(mixed $collection): array
+	{
+		if (!is_array($collection)) {
+			return [];
+		}
+
+		if (isset($collection['env_variable']) || isset($collection['environment_variable'])) {
+			return [$collection];
+		}
+
+		if (isset($collection['data']) && is_array($collection['data'])) {
+			return $this->normalizeCollection($collection['data']);
+		}
+
+		if (isset($collection['variables']) && is_array($collection['variables'])) {
+			return $this->normalizeCollection($collection['variables']);
+		}
+
+		return array_values(array_filter($collection, 'is_array'));
+	}
+
+	private function extractEggVariables(array $eggData, array $egg): array
+	{
+		$candidates = [
+			$egg['variables'] ?? null,
+			$eggData['variables'] ?? null,
+			$egg['egg_variables'] ?? null,
+			$eggData['egg_variables'] ?? null,
+			$eggData['egg']['variables'] ?? null,
+		];
+
+		foreach ($candidates as $candidate) {
+			$variables = $this->normalizeCollection($candidate);
+			if (!empty($variables)) {
+				return $variables;
+			}
+		}
+
+		return [];
+	}
+
+	private function reservedSettingKeys(): array
+	{
+		return [
+			'host',
+			'api_key',
+			'default_language',
+			'oauth_provider_uuid',
+			'nest_uuid',
+			'egg_uuid',
+			'node_uuid',
+			'location_uuid',
+			'location_uuids',
+			'memory',
+			'swap',
+			'disk',
+			'cpu',
+			'memory_overhead',
+			'io_weight',
+			'allocations_limit',
+			'database_limit',
+			'backup_limit',
+			'schedule_limit',
+			'custom_feature_limits',
+			'docker_image',
+			'startup_command',
+			'server_name_prefix',
+			'server_name',
+			'custom_server_name',
+			'skip_installer',
+			'start_on_completion',
+			'hugepages_passthrough',
+			'kvm_passthrough',
+			'pinned_cpus',
+			'backup_configuration_uuid',
+			'product_id',
+			'service_id',
+			'price_id',
+			'quantity',
+			'billing_cycle',
+			'configurable_options',
+			'properties',
+			'settings',
+		];
+	}
+
+	private function looksLikeEggEnvVariable(string $key): bool
+	{
+		return (bool) preg_match('/^[A-Za-z_][A-Za-z0-9_]{0,254}$/', $key);
+	}
+
+	private function addVariableToPayload(array &$variables, array &$addedKeys, string $envKey, $value): void
+	{
+		$envKey = trim($envKey);
+		if ($envKey === '') {
+			return;
+		}
+
+		$normalized = strtoupper($envKey);
+		$variables[] = [
+			'env_variable' => $envKey,
+			'value' => $this->stringifySettingValue($value),
+		];
+		$addedKeys[$normalized] = count($variables) - 1;
+	}
+
+	private function buildEggVariablesPayload(array $eggData, array $egg, array $settings): array
+	{
+		$variables = [];
+		$addedKeys = [];
+
+		// First path: if the API response includes egg variables, send every real egg variable,
+		// using Paymenter values when present and egg defaults otherwise.
+		foreach ($this->extractEggVariables($eggData, $egg) as $var) {
+			$envKey = $var['env_variable'] ?? $var['environment_variable'] ?? null;
+			if (!$envKey) {
+				continue;
+			}
+
+			$value = null;
+			if (!$this->getSettingValue($settings, $envKey, $value)) {
+				$value = $var['default_value'] ?? '';
+			}
+
+			$this->addVariableToPayload($variables, $addedKeys, (string) $envKey, $value);
+		}
+
+		// Fallback path: some Calagopus egg endpoints do not return variables.
+		// In that case, pass any Paymenter setting/config-option that looks like an egg env var.
+		// Calagopus matches these by env_variable against the egg's real variables and uses
+		// egg defaults for anything not provided, so this stays generic and egg-agnostic.
+		$reserved = array_flip(array_map('strtolower', $this->reservedSettingKeys()));
+
+		foreach ($settings as $key => $value) {
+			if (!is_string($key) || $key === '') {
+				continue;
+			}
+
+			if (isset($reserved[strtolower($key)])) {
+				continue;
+			}
+
+			if (!$this->looksLikeEggEnvVariable($key)) {
+				continue;
+			}
+
+			if ($value === null || $value === '') {
+				continue;
+			}
+
+			$normalized = strtoupper($key);
+			if (isset($addedKeys[$normalized])) {
+				// The key was already added from a fetched egg variable. Replace the value
+				// with the explicit Paymenter value, preserving the real egg env name.
+				$variables[$addedKeys[$normalized]]['value'] = $this->stringifySettingValue($value);
+				continue;
+			}
+
+			$this->addVariableToPayload($variables, $addedKeys, $key, $value);
+		}
+
+		return $variables;
+	}
+
+	private function sanitizeServerName(string $name): string
+	{
+		$name = trim($name);
+		$name = preg_replace('/\s+/', ' ', $name);
+		$name = preg_replace('/[^\pL\pN _\.\-]/u', '', $name);
+		$name = trim($name);
+
+		return Str::limit($name, 48, '');
+	}
+
+	private function buildServerName(array $settings, Service $service): string
+	{
+		$name = null;
+		$hasName = $this->getSettingValue($settings, 'server_name', $name)
+			|| $this->getSettingValue($settings, 'custom_server_name', $name)
+			|| $this->getSettingValue($settings, 'SERVER_NAME', $name);
+
+		if ($hasName) {
+			$cleanName = $this->sanitizeServerName($this->stringifySettingValue($name));
+			if ($cleanName !== '') {
+				return $cleanName;
+			}
+		}
+
+		$prefix = trim((string) ($settings['server_name_prefix'] ?? ''));
+		return ($prefix ?: 'Server-') . $service->id;
+	}
+
 	/**
 	 * Find a server by the service's external ID.
 	 */
@@ -521,7 +773,7 @@ class Calagopus extends Server
 		$nestUuid = $settings['nest_uuid'];
 		$eggUuid = $settings['egg_uuid'];
 
-		$eggData = $this->request('/api/admin/nests/' . $nestUuid . '/eggs/' . $eggUuid);
+		$eggData = $this->request('/api/admin/nests/' . $nestUuid . '/eggs/' . $eggUuid, 'get', ['include' => 'variables']);
 		$egg = $eggData['egg'];
 
 		$dockerImage = !empty($settings['docker_image'])
@@ -533,8 +785,7 @@ class Calagopus extends Server
 				? $egg['startup_commands']['Default']
 				: (array_values($egg['startup_commands'])[0] ?? '')));
 
-		$prefix = $settings['server_name_prefix'] ?? '';
-		$serverName = ($prefix ?: 'Server-') . $service->id;
+		$serverName = $this->buildServerName($settings, $service);
 
 		$featureLimits = [
 			'allocations' => (int) ($settings['allocations_limit'] ?? 1),
@@ -545,22 +796,15 @@ class Calagopus extends Server
 		$customLimits = $this->parseCustomFeatureLimits($settings['custom_feature_limits'] ?? '');
 		$featureLimits = array_merge($featureLimits, $customLimits);
 
-		$variables = [];
-		foreach (($eggVariables['variables'] ?? []) as $var) {
-			$envKey = $var['env_variable'];
-			$variables[] = [
-				'env_variable' => $envKey,
-				'value' => $settings[$envKey] ?? $var['default_value'] ?? '',
-			];
-		}
+		$variables = $this->buildEggVariablesPayload($eggData, $egg, $settings);
 
 		$ioWeight = isset($settings['io_weight']) && $settings['io_weight'] !== '' ? (int) $settings['io_weight'] : null;
 
 		$serverPayload = [
 			'owner_uuid' => $panelUser['uuid'],
 			'egg_uuid' => $eggUuid,
-			'start_on_completion' => (bool) ($settings['start_on_completion'] ?? false),
-			'skip_installer' => (bool) ($settings['skip_installer'] ?? false),
+			'start_on_completion' => $this->boolSetting($settings, 'start_on_completion'),
+			'skip_installer' => $this->boolSetting($settings, 'skip_installer'),
 			'external_id' => (string) $service->id,
 			'name' => $serverName,
 			'limits' => [
@@ -573,8 +817,8 @@ class Calagopus extends Server
 			'pinned_cpus' => $this->parsePinnedCpus($settings['pinned_cpus'] ?? ''),
 			'startup' => $startup,
 			'image' => $dockerImage,
-			'hugepages_passthrough_enabled' => (bool) ($settings['hugepages_passthrough'] ?? false),
-			'kvm_passthrough_enabled' => (bool) ($settings['kvm_passthrough'] ?? false),
+			'hugepages_passthrough_enabled' => $this->boolSetting($settings, 'hugepages_passthrough'),
+			'kvm_passthrough_enabled' => $this->boolSetting($settings, 'kvm_passthrough'),
 			'feature_limits' => $featureLimits,
 			'variables' => $variables,
 		];
@@ -690,8 +934,8 @@ class Calagopus extends Server
 				'disk'            => (int) ($settings['disk'] ?? 10240),
 			],
 			'feature_limits' => $featureLimits,
-			'hugepages_passthrough_enabled' => (bool) ($settings['hugepages_passthrough'] ?? false),
-			'kvm_passthrough_enabled' => (bool) ($settings['kvm_passthrough'] ?? false),
+			'hugepages_passthrough_enabled' => $this->boolSetting($settings, 'hugepages_passthrough'),
+			'kvm_passthrough_enabled' => $this->boolSetting($settings, 'kvm_passthrough'),
 			'pinned_cpus' => $this->parsePinnedCpus($settings['pinned_cpus'] ?? ''),
 		];
 
