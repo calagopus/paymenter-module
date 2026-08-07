@@ -40,3 +40,20 @@ OAuth linking allows your users to log into the Calagopus panel using their Paym
 9. Save the server configuration in Paymenter.
 
 10. Profit, now when a new server is created for a user, Paymenter will automatically link their account to Calagopus using the OAuth provider, allowing them to log in to the panel with their Paymenter credentials.
+
+### Linking existing customers
+
+Linking happens automatically at server creation, so customers who already had a server before you set up OAuth will not have a link yet. To backfill them:
+
+- **All at once** - on the Calagopus server configuration, click **Sync All Users** next to the "OAuth Provider UUID" field. This queues a background sweep over every customer who owns a Calagopus service, so it needs a running queue worker.
+
+- **One customer at a time** - go to **Extensions → Calagopus OAuth Links**, find the customer and click **Sync** on their row.
+
+Both routes only ever add a missing link; they never create panel accounts. The **Calagopus OAuth Links** page also shows sweep progress and the last result for each customer:
+
+| Result | Meaning |
+| --- | --- |
+| Linked | An OAuth link was created |
+| Already linked | The customer was already linked, nothing to do |
+| No panel account | No Calagopus user matches this customer, so there was nothing to link |
+| Failed | The panel rejected the request, the reason is shown on the page |

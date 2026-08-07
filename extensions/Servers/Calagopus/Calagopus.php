@@ -5,29 +5,24 @@ namespace Paymenter\Extensions\Servers\Calagopus;
 use App\Classes\Extension\Server;
 use App\Models\Service;
 use Exception;
-use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\View;
 use Illuminate\Support\Str;
+use Paymenter\Extensions\Servers\Calagopus\Admin\Actions\SyncOAuthLinksAction;
+use Paymenter\Extensions\Servers\Calagopus\Support\CalagopusAPI;
+use Paymenter\Extensions\Servers\Calagopus\Support\OAuthSync;
 
 class Calagopus extends Server
 {
-	/**
-	 * Make a request to the Calagopus API.
-	 */
-	private function request(string $url, string $method = 'get', array $data = []): array
+	private ?CalagopusAPI $api = null;
+
+	public function boot()
 	{
-		$reqUrl = rtrim($this->config('host'), '/') . $url;
-		$response = Http::withHeaders([
-			'Authorization' => 'Bearer ' . $this->config('api_key'),
-			'Accept' => 'application/json',
-		])->$method($reqUrl, $data);
+		View::addNamespace('calagopus', __DIR__ . '/resources/views');
+	}
 
-		if (!$response->successful()) {
-			$body = $response->json();
-			$errors = $body['errors'] ?? ['Unknown API error'];
-			throw new Exception('Calagopus API Error (HTTP ' . $response->status() . '): ' . implode(', ', $errors));
-		}
-
-		return $response->json() ?? [];
+	private function api(): CalagopusAPI
+	{
+		return $this->api ??= new CalagopusAPI($this->config('host'), $this->config('api_key'));
 	}
 
 	public function getConfig($values = []): array
@@ -66,6 +61,7 @@ class Calagopus extends Server
 				'description' => 'UUID of the Paymenter OAuth provider configured in Calagopus. Used to link users.',
 				'required' => false,
 				'encrypted' => false,
+				'action' => SyncOAuthLinksAction::class,
 			],
 		];
 	}
@@ -73,7 +69,7 @@ class Calagopus extends Server
 	public function testConfig(): bool|string
 	{
 		try {
-			$this->request('/api/admin/locations', 'get', ['page' => 1, 'per_page' => 1]);
+			$this->api()->getLocations(perPage: 1);
 		} catch (Exception $e) {
 			return $e->getMessage();
 		}
@@ -85,19 +81,17 @@ class Calagopus extends Server
 	{
 		$nestList = [];
 		try {
-			$nestsData = $this->request('/api/admin/nests', 'get', ['page' => 1, 'per_page' => 100]);
-			foreach (($nestsData['nests']['data'] ?? []) as $nest) {
+			foreach ($this->api()->getNests() as $nest) {
 				$nestList[$nest['uuid']] = $nest['name'];
 			}
 		} catch (Exception $e) {
-			// Ignore — will show empty dropdown
+			// Ignore
 		}
 
 		$eggList = [];
 		if (isset($values['nest_uuid']) && $values['nest_uuid'] !== '') {
 			try {
-				$eggsData = $this->request('/api/admin/nests/' . $values['nest_uuid'] . '/eggs', 'get', ['page' => 1, 'per_page' => 100]);
-				foreach (($eggsData['eggs']['data'] ?? []) as $egg) {
+				foreach ($this->api()->getEggs($values['nest_uuid']) as $egg) {
 					$eggList[$egg['uuid']] = $egg['name'];
 				}
 			} catch (Exception $e) {
@@ -107,8 +101,7 @@ class Calagopus extends Server
 
 		$locationList = [];
 		try {
-			$locationsData = $this->request('/api/admin/locations', 'get', ['page' => 1, 'per_page' => 100]);
-			foreach (($locationsData['locations']['data'] ?? []) as $loc) {
+			foreach ($this->api()->getLocations() as $loc) {
 				$locationList[$loc['uuid']] = $loc['name'];
 			}
 		} catch (Exception $e) {
@@ -117,8 +110,7 @@ class Calagopus extends Server
 
 		$nodeList = ['' => '-- Auto (use locations) --'];
 		try {
-			$nodesData = $this->request('/api/admin/nodes', 'get', ['page' => 1, 'per_page' => 100]);
-			foreach (($nodesData['nodes']['data'] ?? []) as $node) {
+			foreach ($this->api()->getNodes() as $node) {
 				$nodeList[$node['uuid']] = $node['name'] . ' (' . ($node['location']['name'] ?? 'N/A') . ')';
 			}
 		} catch (Exception $e) {
@@ -359,14 +351,47 @@ class Calagopus extends Server
 	 */
 	private function findServer(int $serviceId, bool $failIfNotFound = true): ?array
 	{
+		$server = $this->api()->getServerByExternalId((string) $serviceId);
+
+		if (!$server && $failIfNotFound) {
+			throw new Exception('Server not found on the panel.');
+		}
+
+		return $server;
+	}
+
+	/**
+	 * Generate a panel username for a Paymenter user, capped at the panel's 15 character limit.
+	 */
+	private function generateUsername($orderUser): string
+	{
+		$baseName = preg_replace('/[^a-zA-Z0-9_]/', '', strtolower(Str::transliterate($orderUser->name ?? 'user')));
+		if (strlen($baseName) < 3) {
+			$baseName = 'user';
+		}
+
+		$idStr = (string) $orderUser->id;
+		$maxNameLen = max(0, 14 - strlen($idStr));
+
+		return substr($baseName, 0, $maxNameLen) . '_' . $idStr;
+	}
+
+	/**
+	 * Create the OAuth link for a panel user, if a provider is configured.
+	 * Failures are swallowed — a missing link is not worth failing provisioning over.
+	 */
+	private function linkOAuthProvider(string $panelUserUuid, $orderUser): void
+	{
+		$oauthProviderUuid = $this->config('oauth_provider_uuid');
+
+		if (!$oauthProviderUuid) {
+			return;
+		}
+
 		try {
-			$response = $this->request('/api/admin/servers/external/' . (string) $serviceId);
-			return $response['server'] ?? null;
+			$this->api()->createOAuthLink($panelUserUuid, $oauthProviderUuid, (string) $orderUser->id);
 		} catch (Exception $e) {
-			if ($failIfNotFound) {
-				throw new Exception('Server not found on the panel.');
-			}
-			return null;
+			// Ignore
 		}
 	}
 
@@ -376,136 +401,57 @@ class Calagopus extends Server
 	 */
 	private function findOrCreateUser($orderUser): array
 	{
-		// Try lookup by oauth identifier if configured
+		// Try lookup by oauth identifier if configured — already linked, nothing more to do
 		$oauthProviderUuid = $this->config('oauth_provider_uuid');
 
 		if ($oauthProviderUuid) {
-			try {
-				$response = $this->request('/api/admin/oauth-providers/' . $oauthProviderUuid . '/users/identifier/' . (string) $orderUser->id);
-				if (isset($response['user_oauth_link']['user'])) {
-					return $response['user_oauth_link']['user'];
-				}
-			} catch (Exception $e) {
-				// Not found — continue to other lookups
+			$linked = $this->api()->getOAuthLinkedUser($oauthProviderUuid, (string) $orderUser->id);
+			if ($linked) {
+				return $linked;
 			}
 		}
 
-		// Try lookup by external ID
-		try {
-			$response = $this->request('/api/admin/users/external/' . (string) $orderUser->id);
-			if (isset($response['user'])) {
-				// Add OAuth link if configured
-				if ($oauthProviderUuid) {
-					try {
-						$this->request('/api/admin/users/' . $response['user']['uuid'] . '/oauth-links', 'post', [
-							'oauth_provider_uuid' => $oauthProviderUuid,
-							'identifier' => (string) $orderUser->id,
-						]);
-					} catch (Exception $e) {
-						// Ignore errors here — not critical if linking fails
-					}
-				}
+		$panelUser = $this->api()->findOrCreateUser(
+			externalId: (string) $orderUser->id,
+			email: $orderUser->email,
+			firstName: $orderUser->first_name ?? $orderUser->name ?? 'User',
+			lastName: $orderUser->last_name ?? '',
+			username: $this->generateUsername($orderUser),
+			language: $this->config('default_language') ?: 'en',
+		);
 
-				return $response['user'];
-			}
-		} catch (Exception $e) {
-			// Not found — continue to create
+		$this->linkOAuthProvider($panelUser['uuid'], $orderUser);
+
+		return $panelUser;
+	}
+
+	/**
+	 * Link an existing Paymenter user to the configured OAuth provider on the panel.
+	 * Unlike findOrCreateUser this never provisions a panel account.
+	 *
+	 * @return string One of the OAuthSync::RESULT_* constants.
+	 */
+	public function syncOAuthLink($orderUser): string
+	{
+		$oauthProviderUuid = $this->config('oauth_provider_uuid');
+
+		if (!$oauthProviderUuid) {
+			throw new Exception('No OAuth Provider UUID is configured for this server.');
 		}
 
-		// Generate a username
-		$baseName = preg_replace('/[^a-zA-Z0-9_]/', '', strtolower(Str::transliterate($orderUser->name ?? 'user')));
-		if (strlen($baseName) < 3) {
-			$baseName = 'user';
+		if ($this->api()->getOAuthLinkedUser($oauthProviderUuid, (string) $orderUser->id)) {
+			return OAuthSync::RESULT_ALREADY_LINKED;
 		}
 
-		$idStr = (string)$orderUser->id;
-		$maxNameLen = max(0, 14 - strlen($idStr));
+		$panelUser = $this->api()->getUserByExternalId((string) $orderUser->id);
 
-		$username = substr($baseName, 0, $maxNameLen) . '_' . $idStr;
-
-		// Try creating the user
-		try {
-			$response = $this->request('/api/admin/users', 'post', [
-				'external_id' => (string) $orderUser->id,
-				'username' => $username,
-				'email' => $orderUser->email,
-				'name_first' => $orderUser->first_name ?? $orderUser->name ?? 'User',
-				'name_last' => $orderUser->last_name ?? '',
-				'admin' => false,
-				'send_email' => true,
-				'language' => $this->config('default_language') ?: 'en',
-			]);
-
-			if ($oauthProviderUuid) {
-				try {
-					$this->request('/api/admin/users/' . $response['user']['uuid'] . '/oauth-links', 'post', [
-						'oauth_provider_uuid' => $oauthProviderUuid,
-						'identifier' => (string) $orderUser->id,
-					]);
-				} catch (Exception $e) {
-					// Ignore errors here — not critical if linking fails
-				}
-			}
-
-			return $response['user'];
-		} catch (Exception $e) {
-			// Only handle 409 — rethrow anything else
-			if (!str_contains($e->getMessage(), '409')) {
-				throw $e;
-			}
+		if (!$panelUser) {
+			return OAuthSync::RESULT_NO_PANEL_USER;
 		}
 
-		// 409 — user exists, search by email
-		$searchResponse = $this->request('/api/admin/users', 'get', [
-			'page' => 1,
-			'per_page' => 10,
-			'search' => $orderUser->email,
-		]);
+		$this->api()->createOAuthLink($panelUser['uuid'], $oauthProviderUuid, (string) $orderUser->id);
 
-		$matched = null;
-		foreach (($searchResponse['users']['data'] ?? []) as $user) {
-			if (strcasecmp($user['email'] ?? '', $orderUser->email) === 0) {
-				$matched = $user;
-				break;
-			}
-		}
-
-		// Fallback: search by username
-		if (!$matched) {
-			$searchResponse = $this->request('/api/admin/users', 'get', [
-				'page' => 1,
-				'per_page' => 10,
-				'search' => $username,
-			]);
-			foreach (($searchResponse['users']['data'] ?? []) as $user) {
-				if (strcasecmp($user['username'] ?? '', $username) === 0) {
-					$matched = $user;
-					break;
-				}
-			}
-		}
-
-		if (!$matched) {
-			throw new Exception('User with this email/username already exists on the panel but could not be found via search.');
-		}
-
-		// Link the existing user by setting external_id
-		$this->request('/api/admin/users/' . $matched['uuid'], 'patch', [
-			'external_id' => (string) $orderUser->id,
-		]);
-
-		if ($oauthProviderUuid) {
-			try {
-				$this->request('/api/admin/users/' . $matched['uuid'] . '/oauth-links', 'post', [
-					'oauth_provider_uuid' => $oauthProviderUuid,
-					'identifier' => (string) $orderUser->id,
-				]);
-			} catch (Exception $e) {
-				// Ignore errors here — not critical if linking fails
-			}
-		}
-
-		return $matched;
+		return OAuthSync::RESULT_LINKED;
 	}
 
 	public function createServer(Service $service, $settings, $properties)
@@ -521,8 +467,7 @@ class Calagopus extends Server
 		$nestUuid = $settings['nest_uuid'];
 		$eggUuid = $settings['egg_uuid'];
 
-		$eggData = $this->request('/api/admin/nests/' . $nestUuid . '/eggs/' . $eggUuid);
-		$egg = $eggData['egg'];
+		$egg = $this->api()->getEgg($nestUuid, $eggUuid);
 
 		$dockerImage = !empty($settings['docker_image'])
 			? $settings['docker_image']
@@ -591,11 +536,7 @@ class Calagopus extends Server
 		$nodeUuid = $settings['node_uuid'] ?? '';
 
 		if (!empty($nodeUuid)) {
-			$allocResponse = $this->request('/api/admin/nodes/' . $nodeUuid . '/allocations/available', 'get', [
-				'page' => 1,
-				'per_page' => 10,
-			]);
-			$allocations = $allocResponse['allocations']['data'] ?? [];
+			$allocations = $this->api()->getAvailableAllocations($nodeUuid);
 			if (empty($allocations)) {
 				throw new Exception('No available allocations on the selected node.');
 			}
@@ -604,8 +545,7 @@ class Calagopus extends Server
 			$serverPayload['allocation_uuid'] = $allocations[0]['uuid'];
 			$serverPayload['allocation_uuids'] = [];
 
-			$response = $this->request('/api/admin/servers', 'post', $serverPayload);
-			$server = $response['server'];
+			$server = $this->api()->createServer($serverPayload);
 		} else {
 			// Auto-deploy with locations
 			$locationUuids = $settings['location_uuids'] ?? [];
@@ -621,46 +561,32 @@ class Calagopus extends Server
 				'allow_overallocation' => false,
 			];
 
-			$response = $this->request('/api/admin/servers/deploy', 'post', $serverPayload);
-			$server = $response['server'];
+			$server = $this->api()->deployServer($serverPayload);
 		}
 
 		return [
 			'server_uuid' => $server['uuid'],
-			'link' => rtrim($this->config('host'), '/') . '/server/' . $server['uuid'],
+			'link' => $this->api()->getServerUrl($server['uuid']),
 		];
 	}
 
 	public function suspendServer(Service $service, $settings, $properties)
 	{
-		$server = $this->findServer($service->id);
-
-		$this->request('/api/admin/servers/' . $server['uuid'], 'patch', [
-			'suspended' => true,
-		]);
+		$this->api()->suspendServer($this->findServer($service->id)['uuid']);
 
 		return true;
 	}
 
 	public function unsuspendServer(Service $service, $settings, $properties)
 	{
-		$server = $this->findServer($service->id);
-
-		$this->request('/api/admin/servers/' . $server['uuid'], 'patch', [
-			'suspended' => false,
-		]);
+		$this->api()->unsuspendServer($this->findServer($service->id)['uuid']);
 
 		return true;
 	}
 
 	public function terminateServer(Service $service, $settings, $properties)
 	{
-		$server = $this->findServer($service->id);
-
-		$this->request('/api/admin/servers/' . $server['uuid'], 'delete', [
-			'force' => false,
-			'delete_backups' => true,
-		]);
+		$this->api()->deleteServer($this->findServer($service->id)['uuid']);
 
 		return true;
 	}
@@ -704,7 +630,7 @@ class Calagopus extends Server
 			$updateData['image'] = $dockerImage;
 		}
 
-		$this->request('/api/admin/servers/' . $server['uuid'], 'patch', $updateData);
+		$this->api()->updateServer($server['uuid'], $updateData);
 
 		return true;
 	}
@@ -721,7 +647,7 @@ class Calagopus extends Server
 			[
 				'type' => 'button',
 				'label' => 'Go to Server',
-				'url' => rtrim($this->config('host'), '/') . '/server/' . $server['uuid'],
+				'url' => $this->api()->getServerUrl($server['uuid']),
 			],
 		];
 	}
