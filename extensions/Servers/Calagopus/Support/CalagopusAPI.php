@@ -323,6 +323,16 @@ class CalagopusAPI
     }
 
     /**
+     * List an egg's variables.
+     */
+    public function getEggVariables(string $nestUuid, string $eggUuid): array
+    {
+        $response = $this->get('/api/admin/nests/' . $nestUuid . '/eggs/' . $eggUuid . '/variables');
+
+        return $response['variables'] ?? [];
+    }
+
+    /**
      * List all locations.
      */
     public function getLocations(int $perPage = 100): array
