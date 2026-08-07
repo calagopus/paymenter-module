@@ -1,0 +1,23 @@
+includes:
+    - vendor/larastan/larastan/extension.neon
+
+parameters:
+
+    paths:
+        - extensions/Servers/Calagopus
+
+    # Matches the level Paymenter runs against its own app/ directory.
+    level: 5
+
+    ignoreErrors:
+        # Paymenter's Eloquent relations carry no return types, so larastan cannot
+        # infer the models they resolve to.
+        -
+            identifier: property.notFound
+            message: '#Access to an undefined property App\\Models\\Server::\$settings\.#'
+        -
+            identifier: property.notFound
+            message: '#Access to an undefined property App\\Models\\Service::\$user\.#'
+        -
+            identifier: larastan.relationExistence
+            message: '#Relation ''services'' is not found in App\\Models\\User model\.#'

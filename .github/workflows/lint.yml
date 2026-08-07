@@ -1,0 +1,63 @@
+name: Lint
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+env:
+  PAYMENTER_REF: "v1.5.7"
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v6
+        with:
+          path: module
+
+      - name: Checkout Paymenter
+        uses: actions/checkout@v6
+        with:
+          repository: Paymenter/paymenter
+          ref: ${{ env.PAYMENTER_REF }}
+          path: paymenter
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.3"
+          extensions: bcmath, curl, gd, mbstring, mysql, openssl, pdo, tokenizer, xml, zip
+          tools: composer:v2
+          coverage: none
+
+      - name: Setup Composer cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.composer/cache
+          key: ${{ runner.os }}-composer-${{ hashFiles('paymenter/composer.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-composer-
+
+      - name: Install dependencies
+        run: composer install --prefer-dist --no-progress --no-interaction
+        working-directory: paymenter
+
+      - name: Stage extension into Paymenter
+        run: |
+          cp -r module/extensions/Servers/Calagopus paymenter/extensions/Servers/Calagopus
+          cp module/phpstan.neon paymenter/phpstan-calagopus.neon
+
+      - name: Run Pint
+        run: vendor/bin/pint --test extensions/Servers/Calagopus
+        working-directory: paymenter
+
+      - name: Run PHPStan
+        run: vendor/bin/phpstan analyse -c phpstan-calagopus.neon --no-progress --memory-limit=1G
+        working-directory: paymenter

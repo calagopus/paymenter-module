@@ -6,8 +6,8 @@ use Exception;
 
 class CalagopusAPIException extends Exception
 {
-	public function __construct(public readonly int $status, string $message)
-	{
-		parent::__construct($message);
-	}
+    public function __construct(public readonly int $status, string $message)
+    {
+        parent::__construct($message);
+    }
 }
