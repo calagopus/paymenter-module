@@ -14,6 +14,10 @@ class OAuthSync
 
     public const RESULT_NO_PANEL_USER = 'no_panel_user';
 
+    public const RESULT_EMAIL_MISMATCH = 'email_mismatch';
+
+    public const RESULT_EMAIL_UNVERIFIED = 'email_unverified';
+
     public const RESULT_FAILED = 'failed';
 
     /**
@@ -59,6 +63,8 @@ class OAuthSync
             self::RESULT_LINKED => 0,
             self::RESULT_ALREADY_LINKED => 0,
             self::RESULT_NO_PANEL_USER => 0,
+            self::RESULT_EMAIL_MISMATCH => 0,
+            self::RESULT_EMAIL_UNVERIFIED => 0,
             self::RESULT_FAILED => 0,
             'errors' => [],
         ];
@@ -95,6 +101,8 @@ class OAuthSync
             self::RESULT_LINKED => 'Linked',
             self::RESULT_ALREADY_LINKED => 'Already linked',
             self::RESULT_NO_PANEL_USER => 'No panel account',
+            self::RESULT_EMAIL_MISMATCH => 'Email mismatch',
+            self::RESULT_EMAIL_UNVERIFIED => 'Email unverified',
             self::RESULT_FAILED => 'Failed',
             default => 'Never synced',
         };
@@ -105,7 +113,7 @@ class OAuthSync
         return match ($result) {
             self::RESULT_LINKED => 'success',
             self::RESULT_ALREADY_LINKED => 'info',
-            self::RESULT_NO_PANEL_USER => 'warning',
+            self::RESULT_NO_PANEL_USER, self::RESULT_EMAIL_MISMATCH, self::RESULT_EMAIL_UNVERIFIED => 'warning',
             self::RESULT_FAILED => 'danger',
             default => 'gray',
         };

@@ -56,4 +56,6 @@ Both routes only ever add a missing link; they never create panel accounts. The 
 | Linked | An OAuth link was created |
 | Already linked | The customer was already linked, nothing to do |
 | No panel account | No Calagopus user matches this customer, so there was nothing to link |
+| Email mismatch | The matching Calagopus user has a different email than the customer, so it was not linked automatically |
+| Email unverified | The customer has not verified their Paymenter email, so it was not linked automatically. Email verification is off on a default Paymenter install, so most customers will land here until they verify or you link them by hand on the panel |
 | Failed | The panel rejected the request, the reason is shown on the page |

@@ -505,7 +505,7 @@ class Calagopus extends Server
 
     /**
      * Find or create a Calagopus panel user for the given service user.
-     * Handles 409 (email/username already exists) by searching and linking.
+     * On 409 (email/username already exists) only links the existing user by email, and only if the customer's email is verified.
      */
     private function findOrCreateUser($orderUser): array
     {
@@ -526,6 +526,7 @@ class Calagopus extends Server
             lastName: $orderUser->last_name ?? '',
             username: $this->generateUsername($orderUser),
             language: $this->config('default_language') ?: 'en',
+            emailVerified: $orderUser->hasVerifiedEmail(),
         );
 
         $this->linkOAuthProvider($panelUser['uuid'], $orderUser);
@@ -555,6 +556,14 @@ class Calagopus extends Server
 
         if (!$panelUser) {
             return OAuthSync::RESULT_NO_PANEL_USER;
+        }
+
+        if (strcasecmp($panelUser['email'] ?? '', $orderUser->email) !== 0) {
+            return OAuthSync::RESULT_EMAIL_MISMATCH;
+        }
+
+        if (!$orderUser->hasVerifiedEmail()) {
+            return OAuthSync::RESULT_EMAIL_UNVERIFIED;
         }
 
         $this->api()->createOAuthLink($panelUser['uuid'], $oauthProviderUuid, (string) $orderUser->id);

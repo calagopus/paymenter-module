@@ -13,6 +13,8 @@
         [OAuthSync::RESULT_LINKED, 'Linked'],
         [OAuthSync::RESULT_ALREADY_LINKED, 'Already linked'],
         [OAuthSync::RESULT_NO_PANEL_USER, 'No panel account'],
+        [OAuthSync::RESULT_EMAIL_MISMATCH, 'Email mismatch'],
+        [OAuthSync::RESULT_EMAIL_UNVERIFIED, 'Email unverified'],
         [OAuthSync::RESULT_FAILED, 'Failed'],
     ];
 @endphp

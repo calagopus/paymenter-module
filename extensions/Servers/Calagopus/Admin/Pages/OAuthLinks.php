@@ -161,8 +161,8 @@ class OAuthLinks extends Page implements HasTable
             OAuthSync::putResult($this->serverId, $user->id, OAuthSync::RESULT_FAILED);
 
             Notification::make()
-                ->title('Sync failed for ' . $user->email)
-                ->body($e->getMessage())
+                ->title('Sync failed for ' . e($user->email))
+                ->body(e($e->getMessage()))
                 ->danger()
                 ->send();
 
@@ -171,7 +171,7 @@ class OAuthLinks extends Page implements HasTable
 
         OAuthSync::putResult($this->serverId, $user->id, $result);
 
-        $notification = Notification::make()->title(OAuthSync::label($result) . ': ' . $user->email);
+        $notification = Notification::make()->title(OAuthSync::label($result) . ': ' . e($user->email));
 
         match ($result) {
             OAuthSync::RESULT_LINKED => $notification->success(),
