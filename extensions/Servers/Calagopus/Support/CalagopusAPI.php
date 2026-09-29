@@ -345,6 +345,14 @@ class CalagopusAPI
     }
 
     /**
+     * Live power state and usage of every server on a node, keyed by server UUID (cached ~15s by the panel).
+     */
+    public function getNodeServerResources(string $nodeUuid): array
+    {
+        return $this->get('/api/admin/nodes/' . $nodeUuid . '/servers/resources')['resources'] ?? [];
+    }
+
+    /**
      * List available allocations on a node.
      */
     public function getAvailableAllocations(string $nodeUuid, int $perPage = 10): array

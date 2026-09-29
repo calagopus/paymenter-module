@@ -10,6 +10,7 @@ use Illuminate\Support\Str;
 use Paymenter\Extensions\Servers\Calagopus\Admin\Actions\SyncOAuthLinksAction;
 use Paymenter\Extensions\Servers\Calagopus\Support\CalagopusAPI;
 use Paymenter\Extensions\Servers\Calagopus\Support\OAuthSync;
+use Paymenter\Extensions\Servers\Calagopus\Support\ServerSummary;
 
 class Calagopus extends Server
 {
@@ -747,10 +748,21 @@ class Calagopus extends Server
 
     public function getActions(Service $service)
     {
-        $server = $this->findServer($service->id, failIfNotFound: false);
+        $view = [
+            'type' => 'view',
+            'name' => 'server',
+            'label' => 'Server',
+        ];
+
+        try {
+            $server = $this->findServer($service->id, failIfNotFound: false);
+        } catch (Exception $e) {
+            // The view explains the panel can't be reached instead of the service page silently losing it.
+            return [$view];
+        }
 
         if (!$server) {
-            return [];
+            return [$view];
         }
 
         return [
@@ -758,7 +770,45 @@ class Calagopus extends Server
                 'type' => 'button',
                 'label' => 'Go to Server',
                 'url' => $this->api()->getServerUrl($server['uuid']),
+                'target' => '_blank',
             ],
+            $view,
         ];
+    }
+
+    public function getView(Service $service, $settings, $properties, $view)
+    {
+        $summary = null;
+        $error = false;
+
+        try {
+            $server = $this->findServer($service->id, failIfNotFound: false);
+            if ($server) {
+                $summary = ServerSummary::make($server, $this->getServerUsage($server));
+            }
+        } catch (Exception $e) {
+            $error = true;
+        }
+
+        return view('calagopus::server', [
+            'summary' => $summary,
+            'error' => $error,
+        ])->render();
+    }
+
+    /**
+     * Live power state and usage of the server from Wings, or null if the node can't be reached.
+     */
+    private function getServerUsage(array $server): ?array
+    {
+        if (empty($server['node']['uuid']) || empty($server['uuid'])) {
+            return null;
+        }
+
+        try {
+            return $this->api()->getNodeServerResources($server['node']['uuid'])[$server['uuid']] ?? null;
+        } catch (Exception $e) {
+            return null;
+        }
     }
 }
