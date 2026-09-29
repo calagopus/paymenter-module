@@ -21,3 +21,7 @@ parameters:
         -
             identifier: larastan.relationExistence
             message: '#Relation ''services'' is not found in App\\Models\\User model\.#'
+        -
+            identifier: argument.type
+            message: '#Parameter \#1 \$view of function view expects view-string\|null, string given\.#'
+            path: extensions/Servers/Calagopus/Calagopus.php
