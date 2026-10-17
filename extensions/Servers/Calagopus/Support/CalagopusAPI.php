@@ -10,7 +10,7 @@ class CalagopusAPI
 
     private string $apiKey;
 
-    public function __construct(string $baseUrl, string $apiKey)
+    public function __construct(string $baseUrl, string $apiKey, private string $name = 'Calagopus')
     {
         $this->baseUrl = rtrim($baseUrl, '/');
         $this->apiKey = $apiKey;
@@ -69,10 +69,12 @@ class CalagopusAPI
         if (!$response->successful()) {
             $body = $response->json();
             $errors = $body['errors'] ?? ['Unknown API error'];
+            // Pterodactyl reports errors as objects, the importer reuses this client against it.
+            $errors = array_map(fn ($error) => is_array($error) ? ($error['detail'] ?? json_encode($error)) : (string) $error, (array) $errors);
 
             throw new CalagopusAPIException(
                 $response->status(),
-                'Calagopus API Error (HTTP ' . $response->status() . '): ' . implode(', ', $errors),
+                $this->name . ' API Error (HTTP ' . $response->status() . '): ' . implode(', ', $errors),
             );
         }
 
@@ -238,6 +240,24 @@ class CalagopusAPI
     {
         try {
             $response = $this->get('/api/admin/servers/external/' . urlencode($externalId));
+        } catch (CalagopusAPIException $e) {
+            if ($e->status === 404) {
+                return null;
+            }
+
+            throw $e;
+        }
+
+        return $response['server'] ?? null;
+    }
+
+    /**
+     * Get server details by UUID.
+     */
+    public function getServer(string $serverUuid): ?array
+    {
+        try {
+            $response = $this->get('/api/admin/servers/' . $serverUuid);
         } catch (CalagopusAPIException $e) {
             if ($e->status === 404) {
                 return null;

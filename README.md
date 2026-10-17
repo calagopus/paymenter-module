@@ -59,3 +59,29 @@ Both routes only ever add a missing link; they never create panel accounts. The 
 | Email mismatch | The matching Calagopus user has a different email than the customer, so it was not linked automatically |
 | Email unverified | The customer has not verified their Paymenter email, so it was not linked automatically. Email verification is off on a default Paymenter install, so most customers will land here until they verify or you link them by hand on the panel |
 | Failed | The panel rejected the request, the reason is shown on the page |
+
+## Migrating from the Pterodactyl Extension
+
+If you sold servers through Paymenter's built-in **Pterodactyl** extension and have migrated your panel to Calagopus, this extension can move your existing products and services over.
+
+Prerequisites:
+
+1. Your panel has been migrated with the Calagopus Pterodactyl importer. It keeps server, user, node, nest and egg UUIDs and server external IDs, so services keep working without changes. Eggs and nodes are matched by UUID (then by name), locations by name (short name first).
+2. The Pterodactyl server in Paymenter still has its URL and application API key, and that panel is still reachable. It is used to translate the stored Pterodactyl IDs.
+3. A Calagopus server has been added in Paymenter.
+
+Go to **Extensions → Calagopus Pterodactyl Import**, pick the Pterodactyl and Calagopus servers and click **Preview** to see what would happen without changing anything. Click **Import** to apply it.
+
+The import:
+
+- Moves each product to the Calagopus server and converts its settings (`io` → IO Weight, databases/backups limits, additional allocations → total allocations, CPU pinning ranges expanded, skip scripts → skip installer). Schedules get a limit of 10, like servers migrated by the panel importer.
+- Checks each service's server on the panel. Servers that lost their external ID are found through Pterodactyl and given it back.
+- Links each server owner to their Paymenter account (sets the panel user's external ID), but only when the owner isn't linked to anything yet, isn't an admin, has the same email, and the customer's email is verified. Run **Sync All Users** afterwards to also create OAuth links.
+
+Anything that cannot be matched is skipped and listed in the results. Fix it on the panel and run the import again; tick **Also re-check services** to retry the services of products that were already moved.
+
+Notes:
+
+- Config options named after Pterodactyl settings (`io`, `databases`, `backups`, `additional_allocations`, `cpu_pinning`, `skip_scripts`, `servername`, `node`, `location`, `egg_id`, `nest_id`) are listed as warnings and must be renamed to the Calagopus names by hand (`io_weight`, `database_limit`, `backup_limit`, `allocations_limit`, ...). Otherwise customers who paid for extras lose them on their next upgrade. `allocations_limit` is the total, so `additional_allocations` values need one added.
+- Products linked by upgrades should be migrated together; the results warn about upgrade paths that still point at Pterodactyl.
+- `port_array`, `port_range`, `dedicated_ip` and `oom_killer` have no Calagopus equivalent and are dropped. Use egg configurations to assign ports.
