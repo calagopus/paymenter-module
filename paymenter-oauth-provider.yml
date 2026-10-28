@@ -14,5 +14,6 @@ enabled: true
 login_only: true
 login_bypass_2fa: false
 link_viewable: true
+api_linkable: true
 user_manageable: false
 basic_auth: false

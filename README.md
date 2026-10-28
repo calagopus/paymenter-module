@@ -35,11 +35,15 @@ OAuth linking allows your users to log into the Calagopus panel using their Paym
 
 7. In Calagopus, edit the OAuth Provider you imported and paste the Client ID and Secret into the corresponding fields. Save the provider.
 
-8. Copy the UUID of the OAuth Provider in Calagopus and paste it into the "OAuth Provider UUID" field in your Paymenter Calagopus server configuration.
+8. Make sure **Linkable with API Keys** is turned on for the provider (Calagopus 1.2.8 and newer). The template turns it on, but providers imported from an older template need it switched on by hand, and only a root admin signed in to the panel can change it. Calagopus 1.2.7 refuses the module's links entirely.
 
-9. Save the server configuration in Paymenter.
+9. Make sure the module's API key holds the `users.oauth-links` and `users.impersonate` admin permissions. The panel only accepts links to customers the key could impersonate, so customers who are panel admins can't be linked this way.
 
-10. Profit, now when a new server is created for a user, Paymenter will automatically link their account to Calagopus using the OAuth provider, allowing them to log in to the panel with their Paymenter credentials.
+10. Copy the UUID of the OAuth Provider in Calagopus and paste it into the "OAuth Provider UUID" field in your Paymenter Calagopus server configuration.
+
+11. Save the server configuration in Paymenter.
+
+12. Profit, now when a new server is created for a user, Paymenter will automatically link their account to Calagopus using the OAuth provider, allowing them to log in to the panel with their Paymenter credentials.
 
 ### Linking existing customers
 
