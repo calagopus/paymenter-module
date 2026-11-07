@@ -10,12 +10,12 @@ use App\Models\User;
 use Exception;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\View;
-use Laravel\Passport\Passport;
-use Paymenter\Extensions\Servers\Calagopus\Models\TrustedOauthClient;
-use Paymenter\Extensions\Servers\Calagopus\Support\CalagopusAPIException;
 use Illuminate\Support\Str;
+use Laravel\Passport\Passport;
 use Paymenter\Extensions\Servers\Calagopus\Admin\Actions\SyncOAuthLinksAction;
+use Paymenter\Extensions\Servers\Calagopus\Models\TrustedOauthClient;
 use Paymenter\Extensions\Servers\Calagopus\Support\CalagopusAPI;
+use Paymenter\Extensions\Servers\Calagopus\Support\CalagopusAPIException;
 use Paymenter\Extensions\Servers\Calagopus\Support\OAuthSync;
 use Paymenter\Extensions\Servers\Calagopus\Support\ServerSummary;
 
