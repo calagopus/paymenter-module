@@ -3,9 +3,16 @@
 namespace Paymenter\Extensions\Servers\Calagopus;
 
 use App\Classes\Extension\Server;
+use App\Helpers\ExtensionHelper;
+use App\Models\Server as ServerModel;
 use App\Models\Service;
+use App\Models\User;
 use Exception;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\View;
+use Laravel\Passport\Passport;
+use Paymenter\Extensions\Servers\Calagopus\Models\TrustedOauthClient;
+use Paymenter\Extensions\Servers\Calagopus\Support\CalagopusAPIException;
 use Illuminate\Support\Str;
 use Paymenter\Extensions\Servers\Calagopus\Admin\Actions\SyncOAuthLinksAction;
 use Paymenter\Extensions\Servers\Calagopus\Support\CalagopusAPI;
@@ -19,6 +26,55 @@ class Calagopus extends Server
     public function boot()
     {
         View::addNamespace('calagopus', __DIR__ . '/resources/views');
+
+        // Paymenter sets its own Passport client model after extensions boot, so swap ours in
+        // once the app has finished booting. OAuth clients that redirect to a configured panel skip consent.
+        app()->booted(fn () => Passport::useClientModel(TrustedOauthClient::class));
+
+        // boot() runs once per extension name, so the listener walks every configured
+        // Calagopus server itself instead of relying on this instance's config.
+        User::deleting(function (User $user) {
+            foreach (ServerModel::where('extension', 'Calagopus')->get() as $server) {
+                $extension = ExtensionHelper::getExtension('server', $server->extension, $server->settings);
+
+                $extension->deletePanelUser($user);
+            }
+        });
+    }
+
+    /**
+     * Delete the panel user linked to a Paymenter user, including every server they own.
+     * Throws on API failure so the Paymenter deletion is aborted rather than leaving data behind.
+     */
+    public function deletePanelUser(User $user): void
+    {
+        if (!$this->boolSetting(['enabled' => $this->config('delete_users_on_delete')], 'enabled')) {
+            return;
+        }
+
+        $panelUser = $this->api()->getUserByExternalId((string) $user->id);
+
+        // Users created before external IDs were set may only be linked through OAuth
+        $oauthProviderUuid = $this->config('oauth_provider_uuid');
+        if (!$panelUser && $oauthProviderUuid) {
+            $panelUser = $this->api()->getOAuthLinkedUser($oauthProviderUuid, (string) $user->id);
+        }
+
+        if (!$panelUser) {
+            return;
+        }
+
+        foreach ($this->api()->getUserOwnedServers($panelUser['uuid']) as $server) {
+            try {
+                $this->api()->deleteServer($server['uuid'], force: true);
+            } catch (CalagopusAPIException $e) {
+                if ($e->status !== 404) {
+                    throw $e;
+                }
+            }
+        }
+
+        $this->api()->deleteUser($panelUser['uuid']);
     }
 
     private function api(): CalagopusAPI
@@ -63,6 +119,13 @@ class Calagopus extends Server
                 'required' => false,
                 'encrypted' => false,
                 'action' => SyncOAuthLinksAction::class,
+            ],
+            [
+                'name' => 'delete_users_on_delete',
+                'label' => 'Delete Panel Users With Paymenter Users',
+                'type' => 'checkbox',
+                'description' => 'When a user is deleted in Paymenter, also delete the linked panel user (matched by external ID) and every server they own on the panel.',
+                'required' => false,
             ],
         ];
     }
@@ -426,6 +489,34 @@ class Calagopus extends Server
         return $variables;
     }
 
+    /**
+     * Config options only reach the egg when their environment variable matches an egg variable.
+     * Renaming a variable on one side silently falls back to the egg default, so log the mismatch.
+     */
+    private function warnUnmatchedProperties(array $eggVariables, array $properties, Service $service): void
+    {
+        $eggKeys = array_map(
+            fn ($var) => strtoupper((string) ($var['env_variable'] ?? '')),
+            $eggVariables,
+        );
+        $reserved = ['SERVER_NAME', 'CUSTOM_SERVER_NAME'];
+
+        $unmatched = array_filter(
+            array_keys($properties),
+            fn ($key) => is_string($key)
+                && preg_match('/^[A-Z][A-Z0-9_]*$/', $key)
+                && !in_array(strtoupper($key), $eggKeys, true)
+                && !in_array(strtoupper($key), $reserved, true),
+        );
+
+        if (!empty($unmatched)) {
+            Log::warning('Calagopus: config options for service #' . $service->id . ' do not match any egg variable and were ignored', [
+                'unmatched' => array_values($unmatched),
+                'egg_variables' => array_values(array_filter($eggKeys)),
+            ]);
+        }
+    }
+
     private function sanitizeServerName(string $name): string
     {
         $name = trim($name);
@@ -609,6 +700,7 @@ class Calagopus extends Server
         $featureLimits = array_merge($featureLimits, $customLimits);
 
         $variables = $this->buildEggVariablesPayload($eggVariables, $settings);
+        $this->warnUnmatchedProperties($eggVariables, (array) $properties, $service);
 
         $ioWeight = isset($settings['io_weight']) && $settings['io_weight'] !== '' ? (int) $settings['io_weight'] : null;
 
