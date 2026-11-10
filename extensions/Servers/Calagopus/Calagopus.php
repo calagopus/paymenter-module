@@ -3,8 +3,11 @@
 namespace Paymenter\Extensions\Servers\Calagopus;
 
 use App\Classes\Extension\Server;
+use App\Events\Service\Updated as ServiceUpdated;
+use App\Helpers\ExtensionHelper;
 use App\Models\Service;
 use Exception;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\View;
 use Illuminate\Support\Str;
 use Paymenter\Extensions\Servers\Calagopus\Admin\Actions\SyncOAuthLinksAction;
@@ -19,6 +22,31 @@ class Calagopus extends Server
     public function boot()
     {
         View::addNamespace('calagopus', __DIR__ . '/resources/views');
+
+        Event::listen(ServiceUpdated::class, function (ServiceUpdated $event): void {
+            $service = $event->service;
+
+            if (!$service->wasChanged('label')) {
+                return;
+            }
+
+            $server = $service->product?->server;
+            if (!$server || strcasecmp($server->extension, 'Calagopus') !== 0) {
+                return;
+            }
+
+            $config = ExtensionHelper::settingsToArray($server->settings);
+            if (!filter_var($config['sync_service_label'] ?? false, FILTER_VALIDATE_BOOLEAN)) {
+                return;
+            }
+
+            try {
+                (new self($config))->syncServerName($service);
+            } catch (Exception $e) {
+                // A panel outage must not prevent customers from renaming their Paymenter service.
+                report($e);
+            }
+        });
     }
 
     private function api(): CalagopusAPI
@@ -63,6 +91,13 @@ class Calagopus extends Server
                 'required' => false,
                 'encrypted' => false,
                 'action' => SyncOAuthLinksAction::class,
+            ],
+            [
+                'name' => 'sync_service_label',
+                'label' => 'Sync Paymenter Service Labels',
+                'type' => 'checkbox',
+                'description' => 'Rename the Calagopus server whenever its Paymenter service label is changed.',
+                'default' => false,
             ],
         ];
     }
@@ -453,6 +488,24 @@ class Calagopus extends Server
         $prefix = trim((string) ($settings['server_name_prefix'] ?? ''));
 
         return ($prefix ?: 'Server-') . $service->id;
+    }
+
+    /**
+     * Rename the Calagopus server to match the service label shown in Paymenter.
+     */
+    public function syncServerName(Service $service): void
+    {
+        $name = $this->sanitizeServerName($service->label);
+        if ($name === '') {
+            return;
+        }
+
+        $server = $this->findServer($service->id, failIfNotFound: false);
+        if (!$server || ($server['name'] ?? null) === $name) {
+            return;
+        }
+
+        $this->api()->updateServer($server['uuid'], ['name' => $name]);
     }
 
     /**
