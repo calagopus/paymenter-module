@@ -19,6 +19,9 @@ parameters:
             identifier: property.notFound
             message: '#Access to an undefined property App\\Models\\Service::\$user\.#'
         -
+            identifier: property.notFound
+            message: '#Access to an undefined property App\\Models\\Service::\$product\.#'
+        -
             identifier: larastan.relationExistence
             message: '#Relation ''services'' is not found in App\\Models\\User model\.#'
         -
