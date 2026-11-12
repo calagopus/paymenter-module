@@ -8,18 +8,19 @@ namespace Paymenter\Extensions\Servers\Calagopus\Support;
  */
 class ServerSummary
 {
+    // State key => tone. The label comes from calagopus::server.states.<key>.
     private const INSTALL_STATES = [
-        'installing' => ['Installing', 'info'],
-        'install_failed' => ['Install Failed', 'danger'],
-        'restoring_backup' => ['Restoring Backup', 'warning'],
-        'backup_restore_failed' => ['Backup Restore Failed', 'danger'],
+        'installing' => 'info',
+        'install_failed' => 'danger',
+        'restoring_backup' => 'warning',
+        'backup_restore_failed' => 'danger',
     ];
 
     private const POWER_STATES = [
-        'running' => ['Running', 'success'],
-        'starting' => ['Starting', 'warning'],
-        'stopping' => ['Stopping', 'warning'],
-        'offline' => ['Offline', 'muted'],
+        'running' => 'success',
+        'starting' => 'warning',
+        'stopping' => 'warning',
+        'offline' => 'muted',
     ];
 
     public static function make(array $server, ?array $usage): array
@@ -46,10 +47,10 @@ class ServerSummary
     public static function describeIncludes(array $featureLimits): array
     {
         $builtIn = [
-            'databases' => 'Databases',
-            'backups' => 'Backups',
-            'allocations' => 'Ports',
-            'schedules' => 'Schedules',
+            'databases' => __('calagopus::server.includes_items.databases'),
+            'backups' => __('calagopus::server.includes_items.backups'),
+            'allocations' => __('calagopus::server.includes_items.ports'),
+            'schedules' => __('calagopus::server.includes_items.schedules'),
         ];
 
         $includes = [];
@@ -84,16 +85,16 @@ class ServerSummary
      */
     public static function describeState(array $server, ?array $usage): ?array
     {
-        [$key, $state] = match (true) {
-            !empty($server['is_suspended']) => ['suspended', ['Suspended', 'danger']],
-            !empty($server['is_transferring']) => ['transferring', ['Transferring', 'info']],
-            !empty($server['node']['maintenance_enabled']) => ['maintenance', ['Node Maintenance', 'danger']],
+        [$key, $tone] = match (true) {
+            !empty($server['is_suspended']) => ['suspended', 'danger'],
+            !empty($server['is_transferring']) => ['transferring', 'info'],
+            !empty($server['node']['maintenance_enabled']) => ['maintenance', 'danger'],
             isset(self::INSTALL_STATES[$server['status'] ?? '']) => [$server['status'], self::INSTALL_STATES[$server['status']]],
             isset(self::POWER_STATES[$usage['state'] ?? '']) => [$usage['state'], self::POWER_STATES[$usage['state']]],
             default => [null, null],
         };
 
-        return $state === null ? null : ['key' => $key, 'label' => $state[0], 'tone' => $state[1]];
+        return $key === null ? null : ['key' => $key, 'label' => __('calagopus::server.states.' . $key), 'tone' => $tone];
     }
 
     /**
@@ -115,7 +116,7 @@ class ServerSummary
         foreach ($resources as $key => [$limit, $used, $format]) {
             $result[$key] = [
                 'used' => $used !== null ? $format($used) : null,
-                'limit' => $limit > 0 ? $format($limit) : 'Unlimited',
+                'limit' => $limit > 0 ? $format($limit) : __('calagopus::server.unlimited'),
                 'percent' => $used !== null && $limit > 0 ? (int) min(100, round($used / $limit * 100)) : null,
             ];
         }

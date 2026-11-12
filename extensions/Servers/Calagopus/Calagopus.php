@@ -11,6 +11,7 @@ use App\Models\User;
 use Exception;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Lang;
 use Illuminate\Support\Facades\View;
 use Illuminate\Support\Str;
 use Laravel\Passport\Passport;
@@ -28,6 +29,7 @@ class Calagopus extends Server
     public function boot()
     {
         View::addNamespace('calagopus', __DIR__ . '/resources/views');
+        Lang::addNamespace('calagopus', __DIR__ . '/lang');
 
         // Paymenter sets its own Passport client model after extensions boot, so swap ours in
         // once the app has finished booting. OAuth clients that redirect to a configured panel skip consent.
