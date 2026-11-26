@@ -402,6 +402,14 @@ class CalagopusAPI
     }
 
     /**
+     * List all backup configurations.
+     */
+    public function getBackupConfigurations(): array
+    {
+        return $this->getAllPages('/api/admin/backup-configurations', 'backup_configurations');
+    }
+
+    /**
      * Live power state and usage of every server on a node, keyed by server UUID (cached ~15s by the panel).
      */
     public function getNodeServerResources(string $nodeUuid): array
