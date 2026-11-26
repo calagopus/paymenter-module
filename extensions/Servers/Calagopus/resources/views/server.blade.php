@@ -9,15 +9,15 @@
     ];
 @endphp
 
-<div class="bg-background-secondary border border-neutral p-6 rounded-lg">
+<div class="bg-background-secondary border border-neutral p-6 rounded-lg overflow-hidden">
     @if ($error)
-        <p class="text-base/50">Unable to load server information from the panel. Please try again later.</p>
+        <p class="text-base/50">{{ __('calagopus::server.unable_to_load') }}</p>
     @elseif (!$summary)
-        <p class="text-base/50">Your server is still being set up. Check back shortly.</p>
+        <p class="text-base/50">{{ __('calagopus::server.being_set_up') }}</p>
     @else
         <div class="flex flex-col md:flex-row justify-between gap-2">
             <div>
-                <h4 class="text-lg font-semibold">{{ $summary['name'] }}</h4>
+                <h4 class="text-lg font-semibold break-words">{{ $summary['name'] }}</h4>
                 @if ($summary['egg'])
                     <span class="text-sm text-base/50">{{ $summary['egg'] }}@if ($summary['nest']) &middot; {{ $summary['nest'] }}@endif</span>
                 @endif
@@ -28,33 +28,33 @@
         </div>
 
         <div class="grid md:grid-cols-2 gap-4 mt-4">
-            <div>
-                <div class="flex items-center text-base">
-                    <span class="mr-2">Address:</span>
+            <div class="overflow-hidden">
+                <div class="flex flex-wrap items-center gap-x-2 text-base">
+                    <span>{{ __('calagopus::server.address') }}:</span>
                     @if ($summary['address'])
-                        <span class="font-mono text-base/50">{{ $summary['address'] }}</span>
-                        <button type="button" class="ml-2 text-sm font-semibold text-primary hover:underline cursor-pointer"
+                        <span class="font-mono text-base/50 break-words">{{ $summary['address'] }}</span>
+                        <button type="button" class="text-sm font-semibold text-primary hover:underline cursor-pointer"
                             x-data="{ copied: false }" data-address="{{ $summary['address'] }}"
                             @click="navigator.clipboard.writeText($el.dataset.address); copied = true; setTimeout(() => copied = false, 2000)"
-                            x-text="copied ? 'Copied' : 'Copy'">Copy</button>
+                            x-text="copied ? @js(__('calagopus::server.copied')) : @js(__('calagopus::server.copy'))">{{ __('calagopus::server.copy') }}</button>
                     @else
-                        <span class="text-base/50">No address assigned</span>
+                        <span class="text-base/50">{{ __('calagopus::server.no_address') }}</span>
                     @endif
                 </div>
                 @if ($summary['location'])
-                    <div class="flex items-center text-base">
-                        <span class="mr-2">Location:</span>
-                        <span class="text-base/50">{{ $summary['location'] }}</span>
+                    <div class="flex flex-wrap items-center gap-x-2 text-base">
+                        <span>{{ __('calagopus::server.location') }}:</span>
+                        <span class="text-base/50 break-words">{{ $summary['location'] }}</span>
                     </div>
                 @endif
                 @if ($summary['uptime'])
-                    <div class="flex items-center text-base">
-                        <span class="mr-2">Uptime:</span>
+                    <div class="flex flex-wrap items-center gap-x-2 text-base">
+                        <span>{{ __('calagopus::server.uptime') }}:</span>
                         <span class="text-base/50">{{ $summary['uptime'] }}</span>
                     </div>
                 @endif
                 <div class="text-base">
-                    <span class="mr-2">Includes:</span>
+                    <span class="mr-2">{{ __('calagopus::server.includes') }}:</span>
                     <span class="text-base/50">
                         @foreach ($summary['includes'] as $include)
                             <span class="whitespace-nowrap">{{ $include['label'] }} <span class="font-semibold text-base">{{ $include['value'] }}</span></span>@if (!$loop->last) &middot; @endif
@@ -63,12 +63,13 @@
                 </div>
             </div>
 
-            <div>
-                @foreach (['memory' => 'Memory', 'disk' => 'Disk', 'cpu' => 'CPU'] as $key => $label)
+            <div class="overflow-hidden">
+                @foreach (['memory', 'disk', 'cpu'] as $key)
+                    @php($label = __('calagopus::server.' . $key))
                     @php($resource = $summary['resources'][$key])
                     <div class="mb-2">
-                        <div class="flex items-center justify-between text-base">
-                            <span class="mr-2">{{ $label }}:</span>
+                        <div class="flex flex-wrap items-center justify-between gap-x-2 text-base">
+                            <span>{{ $label }}:</span>
                             <span class="text-base/50">
                                 @if ($resource['used'] !== null){{ $resource['used'] }} / @endif{{ $resource['limit'] }}
                             </span>
