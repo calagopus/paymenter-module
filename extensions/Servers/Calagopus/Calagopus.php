@@ -217,6 +217,15 @@ class Calagopus extends Server
             // Ignore
         }
 
+        $backupConfigList = ['' => '-- None (use node/location default) --'];
+        try {
+            foreach ($this->api()->getBackupConfigurations() as $backupConfig) {
+                $backupConfigList[$backupConfig['uuid']] = $backupConfig['name'];
+            }
+        } catch (Exception $e) {
+            // Ignore
+        }
+
         return [
             [
                 'name' => 'nest_uuid',
@@ -400,9 +409,10 @@ class Calagopus extends Server
             ],
             [
                 'name' => 'backup_configuration_uuid',
-                'label' => 'Backup Configuration UUID',
-                'type' => 'text',
-                'description' => 'Optional backup configuration to assign.',
+                'label' => 'Backup Configuration',
+                'type' => 'select',
+                'options' => $backupConfigList,
+                'description' => 'Optional backup configuration to assign, or leave as None to inherit from the node/location.',
                 'required' => false,
             ],
         ];
@@ -886,6 +896,9 @@ class Calagopus extends Server
         if ($dockerImage) {
             $updateData['image'] = $dockerImage;
         }
+
+        $backupConfigUuid = trim($settings['backup_configuration_uuid'] ?? '');
+        $updateData['backup_configuration_uuid'] = $backupConfigUuid !== '' ? $backupConfigUuid : null;
 
         $this->api()->updateServer($server['uuid'], $updateData);
 
