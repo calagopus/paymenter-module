@@ -1,6 +1,8 @@
 <?php
 
 return [
+    'server' => 'Server',
+    'go_to_server' => 'Go to Server',
     'unable_to_load' => 'Unable to load server information from the panel. Please try again later.',
     'being_set_up' => 'Your server is still being set up. Check back shortly.',
     'address' => 'Address',

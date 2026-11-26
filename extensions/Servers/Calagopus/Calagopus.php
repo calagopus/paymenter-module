@@ -897,7 +897,7 @@ class Calagopus extends Server
         $view = [
             'type' => 'view',
             'name' => 'server',
-            'label' => 'Server',
+            'label' => __('calagopus::server.server'),
         ];
 
         try {
@@ -914,7 +914,7 @@ class Calagopus extends Server
         return [
             [
                 'type' => 'button',
-                'label' => 'Go to Server',
+                'label' => __('calagopus::server.go_to_server'),
                 'url' => $this->api()->getServerUrl($server['uuid']),
                 'target' => '_blank',
             ],

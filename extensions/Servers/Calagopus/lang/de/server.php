@@ -1,6 +1,8 @@
 <?php
 
 return [
+    'server' => 'Server',
+    'go_to_server' => 'Zum Server',
     'unable_to_load' => 'Die Serverinformationen konnten nicht vom Panel geladen werden. Bitte versuche es später erneut.',
     'being_set_up' => 'Dein Server wird noch eingerichtet. Schau bitte gleich noch einmal vorbei.',
     'address' => 'Adresse',
