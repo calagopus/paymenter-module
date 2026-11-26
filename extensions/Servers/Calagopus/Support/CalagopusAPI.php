@@ -81,6 +81,31 @@ class CalagopusAPI
         return $response->json() ?? [];
     }
 
+    /**
+     * Fetch every page of a paginated list endpoint.
+     */
+    private function getAllPages(string $endpoint, string $key, array $query = [], int $perPage = 100, int $maxPages = 50): array
+    {
+        $items = [];
+
+        for ($page = 1; $page <= $maxPages; $page++) {
+            $list = $this->get($endpoint, $query + ['page' => $page, 'per_page' => $perPage])[$key] ?? [];
+            $data = $list['data'] ?? [];
+
+            if (empty($data)) {
+                break;
+            }
+
+            array_push($items, ...$data);
+
+            if (isset($list['total']) && count($items) >= (int) $list['total']) {
+                break;
+            }
+        }
+
+        return $items;
+    }
+
     /** Users */
 
     /**
@@ -136,22 +161,7 @@ class CalagopusAPI
      */
     public function getUserOwnedServers(string $userUuid): array
     {
-        $servers = [];
-        $page = 1;
-
-        do {
-            $response = $this->get('/api/admin/users/' . $userUuid . '/servers', [
-                'owned' => 'true',
-                'page' => $page,
-                'per_page' => 100,
-            ]);
-
-            $data = $response['servers']['data'] ?? [];
-            $servers = array_merge($servers, $data);
-            $page++;
-        } while (count($data) === 100);
-
-        return $servers;
+        return $this->getAllPages('/api/admin/users/' . $userUuid . '/servers', 'servers', ['owned' => 'true']);
     }
 
     /**
@@ -342,9 +352,7 @@ class CalagopusAPI
      */
     public function getNests(): array
     {
-        $response = $this->get('/api/admin/nests', ['page' => 1, 'per_page' => 100]);
-
-        return $response['nests']['data'] ?? [];
+        return $this->getAllPages('/api/admin/nests', 'nests');
     }
 
     /**
@@ -352,9 +360,7 @@ class CalagopusAPI
      */
     public function getEggs(string $nestUuid): array
     {
-        $response = $this->get('/api/admin/nests/' . $nestUuid . '/eggs', ['page' => 1, 'per_page' => 100]);
-
-        return $response['eggs']['data'] ?? [];
+        return $this->getAllPages('/api/admin/nests/' . $nestUuid . '/eggs', 'eggs');
     }
 
     /**
@@ -378,11 +384,13 @@ class CalagopusAPI
     /**
      * List all locations.
      */
-    public function getLocations(int $perPage = 100): array
+    public function getLocations(?int $perPage = null): array
     {
-        $response = $this->get('/api/admin/locations', ['page' => 1, 'per_page' => $perPage]);
+        if ($perPage !== null) {
+            return $this->get('/api/admin/locations', ['page' => 1, 'per_page' => $perPage])['locations']['data'] ?? [];
+        }
 
-        return $response['locations']['data'] ?? [];
+        return $this->getAllPages('/api/admin/locations', 'locations');
     }
 
     /**
@@ -390,9 +398,7 @@ class CalagopusAPI
      */
     public function getNodes(): array
     {
-        $response = $this->get('/api/admin/nodes', ['page' => 1, 'per_page' => 100]);
-
-        return $response['nodes']['data'] ?? [];
+        return $this->getAllPages('/api/admin/nodes', 'nodes');
     }
 
     /**
